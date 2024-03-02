@@ -1,6 +1,6 @@
 #![cfg(feature = "syringe")]
 
-use dll_syringe::{error::InjectError, process::Process, Syringe};
+use mini_syringe::{error::InjectError, process::Process, Syringe};
 
 #[allow(unused)]
 mod common;
@@ -49,7 +49,7 @@ syringe_test! {
 
 mod inject_with_wrong_payload_fails_with_module_incompatible {
     use super::*;
-    use dll_syringe::process::OwnedProcess;
+    use mini_syringe::process::OwnedProcess;
     use std::{
         path::Path,
         process::{Command, Stdio},

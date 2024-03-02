@@ -1,5 +1,5 @@
 use core::mem::{size_of, zeroed};
-use dll_syringe::process::{BorrowedProcess, OwnedProcess, Process};
+use mini_syringe::process::{BorrowedProcess, OwnedProcess, Process};
 use std::{ffi::CString, fs, mem, process::Command, time::Duration};
 use winapi::um::{
     libloaderapi::{GetProcAddress, LoadLibraryA},

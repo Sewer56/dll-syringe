@@ -562,51 +562,6 @@ impl From<EjectError> for SyringeError {
     }
 }
 
-#[cfg(feature = "rpc-core")]
-impl From<LoadProcedureError> for SyringeError {
-    fn from(err: LoadProcedureError) -> Self {
-        match err {
-            LoadProcedureError::Io(e) => Self::Io(e),
-            LoadProcedureError::UnsupportedTarget => Self::UnsupportedTarget,
-            LoadProcedureError::RemoteIo(e) => Self::RemoteIo(e),
-            LoadProcedureError::RemoteException(e) => Self::RemoteException(e),
-            LoadProcedureError::ProcessInaccessible => Self::ProcessInaccessible,
-            LoadProcedureError::ModuleInaccessible => Self::ModuleInaccessible,
-            #[cfg(target_arch = "x86_64")]
-            #[cfg(feature = "into-x86-from-x64")]
-            LoadProcedureError::Goblin(e) => Self::Goblin(e),
-        }
-    }
-}
-
-#[cfg(feature = "rpc-core")]
-#[cfg_attr(all(feature = "rpc-core", not(feature = "rpc-raw")), doc(hidden))]
-impl From<crate::rpc::RawRpcError> for SyringeError {
-    fn from(err: crate::rpc::RawRpcError) -> Self {
-        match err {
-            crate::rpc::RawRpcError::Io(err) => Self::Io(err),
-            crate::rpc::RawRpcError::RemoteException(code) => Self::RemoteException(code),
-            crate::rpc::RawRpcError::ProcessInaccessible => Self::ProcessInaccessible,
-            crate::rpc::RawRpcError::ModuleInaccessible => Self::ModuleInaccessible,
-        }
-    }
-}
-
-#[cfg(feature = "rpc-payload")]
-#[cfg_attr(all(feature = "rpc-core", not(feature = "rpc-raw")), doc(hidden))]
-impl From<crate::rpc::PayloadRpcError> for SyringeError {
-    fn from(err: crate::rpc::PayloadRpcError) -> Self {
-        match err {
-            crate::rpc::PayloadRpcError::Io(e) => Self::Io(e),
-            crate::rpc::PayloadRpcError::RemoteException(e) => Self::RemoteException(e),
-            crate::rpc::PayloadRpcError::ProcessInaccessible => Self::ProcessInaccessible,
-            crate::rpc::PayloadRpcError::ModuleInaccessible => Self::ModuleInaccessible,
-            crate::rpc::PayloadRpcError::RemoteProcedure(e) => Self::RemotePayloadProcedure(e),
-            crate::rpc::PayloadRpcError::Serde(e) => Self::Serde(e),
-        }
-    }
-}
-
 /// Error enum encompassing all errors during syringe operations in a nested format.
 #[derive(Debug, Error)]
 #[cfg(feature = "syringe")]
@@ -618,16 +573,4 @@ pub enum SyringeOperationError {
     /// Variant representing an error while ejecting a module.
     #[error("eject error: {}", _0)]
     Eject(#[from] EjectError),
-    /// Variant representing an error while using payload rpc.
-    #[cfg(feature = "rpc-payload")]
-    #[error("payload rpc error: {}", _0)]
-    PayloadProcedureCall(#[from] crate::rpc::PayloadRpcError),
-    /// Variant representing an error while using raw rpc.
-    #[cfg(feature = "rpc-raw")]
-    #[error("raw rpc error: {}", _0)]
-    RawProcedureCall(#[from] crate::rpc::RawRpcError),
-    /// Variant representing an error while using rpc.
-    #[cfg(feature = "rpc-core")]
-    #[error("procedure load error: {}", _0)]
-    ProcedureLoad(#[from] LoadProcedureError),
 }

@@ -8,11 +8,11 @@ using System;
 using System.Runtime.InteropServices;
 
 
-namespace dll_syringe.Net.Sys
+namespace mini_syringe.Net.Sys
 {
     public static unsafe partial class NativeMethods
     {
-        const string __DllName = "dll_syringe";
+        const string __DllName = "mini_syringe";
 
 
 

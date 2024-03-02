@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using dll_syringe.Net.Sys;
+using mini_syringe.Net.Sys;
 
 // ReSharper disable once CheckNamespace
 class Init

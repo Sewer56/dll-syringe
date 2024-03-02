@@ -1,4 +1,4 @@
-use dll_syringe::process::Process;
+use mini_syringe::process::Process;
 use std::time::Duration;
 
 #[allow(unused)]
@@ -25,7 +25,7 @@ process_test! {
 }
 
 #[cfg(feature = "syringe")]
-use dll_syringe::Syringe;
+use mini_syringe::Syringe;
 
 #[cfg(feature = "syringe")]
 syringe_test! {

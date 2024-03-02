@@ -4,7 +4,7 @@
 #[allow(unused)]
 mod common;
 
-use dll_syringe::c_exports::*;
+use mini_syringe::c_exports::*;
 use std::ffi::CString;
 use std::os::windows::io::IntoRawHandle;
 use winapi::um::processthreadsapi::GetProcessId;

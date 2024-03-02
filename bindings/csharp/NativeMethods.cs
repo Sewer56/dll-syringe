@@ -3,7 +3,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-namespace dll_syringe.Net.Sys;
+namespace mini_syringe.Net.Sys;
 
 public static unsafe partial class NativeMethods
 {

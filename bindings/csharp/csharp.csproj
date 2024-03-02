@@ -2,13 +2,13 @@
 
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
-    <AssemblyName>dll_syringe.Net.Sys</AssemblyName>
-    <RootNamespace>dll_syringe.Net.Sys</RootNamespace>
-    <PackageProjectUrl>https://github.com/OpenByteDev/dll-syringe</PackageProjectUrl>
+    <AssemblyName>mini_syringe.Net.Sys</AssemblyName>
+    <RootNamespace>mini_syringe.Net.Sys</RootNamespace>
+    <PackageProjectUrl>https://github.com/Reloaded-Project/mini-syringe</PackageProjectUrl>
     <Description>A windows dll injection library written in Rust. (Raw C# Bindings).</Description>
-    <Version>0.16.0</Version>
+    <Version>0.1.0</Version>
     <Authors></Authors>
-    <Product>dll-syringe</Product>
+    <Product>mini-syringe</Product>
 
     <!-- Common Settings -->
     <LangVersion>preview</LangVersion>

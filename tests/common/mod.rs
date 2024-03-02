@@ -1,6 +1,6 @@
 use core::iter::once;
-use dll_syringe::process::OwnedProcess;
-use dll_syringe::process::Process;
+use mini_syringe::process::OwnedProcess;
+use mini_syringe::process::Process;
 use std::ffi::CString;
 use std::ffi::OsStr;
 use std::mem::zeroed;
@@ -139,7 +139,7 @@ macro_rules! syringe_test {
     (fn $test_name:ident ($process:ident : OwnedProcess, $payload_path:ident : &Path $(,)?) $body:block) => {
         mod $test_name {
             use super::*;
-            use dll_syringe::process::OwnedProcess;
+            use mini_syringe::process::OwnedProcess;
             use std::{
                 path::Path,
             };
@@ -188,7 +188,7 @@ macro_rules! suspended_process_test {
     (fn $test_name:ident ($process:ident : OwnedProcess $(,)?) $body:block) => {
         mod $test_name {
             use super::*;
-            use dll_syringe::process::OwnedProcess;
+            use mini_syringe::process::OwnedProcess;
             use std::{
                 path::Path
             };
@@ -233,7 +233,7 @@ macro_rules! process_test {
     (fn $test_name:ident ($process:ident : OwnedProcess $(,)?) $body:block) => {
         mod $test_name {
             use super::*;
-            use dll_syringe::process::OwnedProcess;
+            use mini_syringe::process::OwnedProcess;
             use std::{
                 path::Path,
                 process::Command,

@@ -1,17 +1,17 @@
 [package]
-name = "dll-syringe"
-version = "0.15.2"
+name = "mini-syringe"
+version = "0.1.0"
 description = "A windows dll injection library written in rust."
 readme = "README.md"
-repository = "https://github.com/OpenByteDev/dll-syringe" 
-homepage = "https://github.com/OpenByteDev/dll-syringe"
+repository = "https://github.com/Reloaded-Project/mini-syringe" 
+homepage = "https://github.com/Reloaded-Project/mini-syringe"
 documentation = "https://docs.rs/dll-syringe"
 license = "MIT"
-authors = ["OpenByte <development.openbyte@gmail.com>"]
+authors = [ "Sewer56", "[Original Author] OpenByte <development.openbyte@gmail.com>"]
 edition = "2021"
 resolver = "2"
 categories = []
-keywords = ["dll-injection", "dll", "injector", "windows", "rpc"]
+keywords = ["dll-injection", "dll", "injector", "windows"]
 
 [dependencies]
 winapi = { version = "0.3", features = ["processthreadsapi", "libloaderapi", "memoryapi", "wow64apiset"], default-features = false }
@@ -43,16 +43,11 @@ current_platform = { version = "0.2", default-features = false }
 tempfile = { version = "3.5", default-features = false }
 
 [features]
-default = ["syringe", "into-x86-from-x64", "rpc"]
+default = ["syringe", "into-x86-from-x64"]
 into-x86-from-x64 = ["syringe", "goblin"]
-rpc-core = ["syringe"]
-rpc-raw = ["rpc-core"]
-rpc-payload = ["rpc-raw", "bincode", "serde"]
-rpc = ["rpc-raw", "rpc-payload"]
 process-memory = []
-payload-utils = ["bincode", "serde"]
 syringe = ["iced-x86"]
-full = ["into-x86-from-x64", "rpc", "process-memory", "payload-utils"]
+full = ["into-x86-from-x64", "process-memory"]
 doc-cfg = ["full"]
 c-exports = ["syringe"]
 

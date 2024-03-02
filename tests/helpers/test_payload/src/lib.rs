@@ -9,24 +9,6 @@ extern "system" fn DllMain(
     1
 }
 
-dll_syringe::payload_procedure! {
-    fn add(a: u32, b: u32) -> u32 {
-        a + b
-    }
-}
-
-dll_syringe::payload_procedure! {
-    fn sum(nums: Vec<u64>) -> u64 {
-        nums.iter().sum()
-    }
-}
-
-dll_syringe::payload_procedure! {
-    fn does_panic() {
-        panic!("Some error message")
-    }
-}
-
 #[no_mangle]
 pub extern "system" fn add_raw(a: u32, b: u32) -> u32 {
     a + b

@@ -1,7 +1,6 @@
 #![cfg(windows)]
 #![feature(maybe_uninit_uninit_array, maybe_uninit_slice, linked_list_cursors)]
 #![cfg_attr(feature = "syringe", feature(once_cell_try))]
-#![cfg_attr(feature = "rpc-core", feature(min_specialization))]
 #![warn(
     unsafe_op_in_unsafe_fn,
     missing_docs,
@@ -23,7 +22,7 @@
     clippy::missing_errors_doc,
     clippy::borrow_as_ptr
 )]
-#![cfg_attr(feature = "doc-cfg", doc = include_str!("../crate-doc.md"))]
+#![cfg_attr(feature = "doc-cfg", doc = include_str!("../README.md"))]
 #![cfg_attr(not(feature = "doc-cfg"), allow(missing_docs))]
 #![cfg_attr(feature = "doc-cfg", feature(doc_cfg))]
 
@@ -34,11 +33,6 @@ pub use syringe::*;
 
 /// Module containing process abstractions and utilities.
 pub mod process;
-
-#[cfg(feature = "rpc-core")]
-#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "rpc-core")))]
-/// Module containing traits and structs regarding remote procedures.
-pub mod rpc;
 
 pub(crate) mod utils;
 
@@ -51,16 +45,3 @@ pub mod function;
 /// C exports for the library.
 #[cfg(feature = "c-exports")]
 pub mod c_exports;
-
-#[cfg(feature = "payload-utils")]
-#[doc(hidden)]
-pub mod payload_utils;
-
-#[cfg(any(feature = "payload-utils", feature = "rpc-payload"))]
-#[derive(Debug, Clone, Copy)]
-#[repr(C)]
-pub(crate) struct ArgAndResultBufInfo {
-    pub data: u64,
-    pub len: u64,
-    pub is_error: bool,
-}

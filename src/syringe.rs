@@ -32,17 +32,9 @@ use {
     winapi::{shared::minwindef::MAX_PATH, um::wow64apiset::GetSystemWow64DirectoryW},
 };
 
-#[cfg(feature = "rpc-core")]
-use {
-    crate::function::RawFunctionPtr,
-    winapi::shared::{minwindef::FARPROC, ntdef::LPCSTR},
-};
-
 type LoadLibraryWFn = unsafe extern "system" fn(LPCWSTR) -> HMODULE;
 type FreeLibraryFn = unsafe extern "system" fn(HMODULE) -> BOOL;
 type GetLastErrorFn = unsafe extern "system" fn() -> DWORD;
-#[cfg(feature = "rpc-core")]
-pub(crate) type GetProcAddressFn = unsafe extern "system" fn(HMODULE, LPCSTR) -> FARPROC;
 
 #[derive(Debug, Clone)]
 pub(crate) struct InjectHelpData {
@@ -50,8 +42,6 @@ pub(crate) struct InjectHelpData {
     load_library_offset: usize,
     free_library_offset: usize,
     get_last_error_offset: usize,
-    #[cfg(feature = "rpc-core")]
-    get_proc_address_offset: usize,
 }
 
 unsafe impl Send for InjectHelpData {}
@@ -66,17 +56,13 @@ impl InjectHelpData {
     pub fn get_get_last_error(&self) -> GetLastErrorFn {
         unsafe { mem::transmute(self.kernel32_module as usize + self.get_last_error_offset) }
     }
-    #[cfg(feature = "rpc-core")]
-    pub fn get_proc_address_fn_ptr(&self) -> GetProcAddressFn {
-        unsafe { mem::transmute(self.kernel32_module as usize + self.get_proc_address_offset) }
-    }
 }
 
 /// An injector that can inject modules (.dll's) into a target process.
 ///
 /// # Example
 /// ```no_run
-/// use dll_syringe::{Syringe, process::OwnedProcess};
+/// use mini_syringe::{Syringe, process::OwnedProcess};
 ///
 /// // find target process by name
 /// let target_process = OwnedProcess::find_first_by_name("target_process").unwrap();
@@ -98,9 +84,6 @@ pub struct Syringe {
     pub(crate) inject_help_data: OnceCell<InjectHelpData>,
     pub(crate) remote_allocator: RemoteBoxAllocator,
     load_library_w_stub: OnceCell<LoadLibraryWStub>,
-    #[cfg(feature = "rpc-core")]
-    pub(crate) get_proc_address_stub:
-        OnceCell<crate::rpc::RemoteProcedureStub<crate::rpc::GetProcAddressParams, RawFunctionPtr>>,
 }
 
 impl Syringe {
@@ -111,8 +94,6 @@ impl Syringe {
             remote_allocator: RemoteBoxAllocator::new(process),
             inject_help_data: OnceCell::new(),
             load_library_w_stub: OnceCell::new(),
-            #[cfg(feature = "rpc-core")]
-            get_proc_address_stub: OnceCell::new(),
         }
     }
 
@@ -309,18 +290,12 @@ impl Syringe {
             kernel32_module.get_local_procedure_address_cstr(cstr!("FreeLibrary"))?;
         let get_last_error_fn_ptr =
             kernel32_module.get_local_procedure_address_cstr(cstr!("GetLastError"))?;
-        #[cfg(feature = "rpc-core")]
-        let get_proc_address_fn_ptr =
-            kernel32_module.get_local_procedure_address_cstr(cstr!("GetProcAddress"))?;
 
         Ok(InjectHelpData {
             kernel32_module: kernel32_module.handle(),
             load_library_offset: load_library_fn_ptr as usize - kernel32_module.handle() as usize,
             free_library_offset: free_library_fn_ptr as usize - kernel32_module.handle() as usize,
             get_last_error_offset: get_last_error_fn_ptr as usize
-                - kernel32_module.handle() as usize,
-            #[cfg(feature = "rpc-core")]
-            get_proc_address_offset: get_proc_address_fn_ptr as usize
                 - kernel32_module.handle() as usize,
         })
     }
@@ -366,20 +341,11 @@ impl Syringe {
             .find(|export| matches!(export.name, Some("GetLastError")))
             .unwrap();
 
-        #[cfg(feature = "rpc-core")]
-        let get_proc_address_export = pe
-            .exports
-            .iter()
-            .find(|export| matches!(export.name, Some("GetProcAddress")))
-            .unwrap();
-
         Ok(InjectHelpData {
             kernel32_module: kernel32_module.handle(),
             load_library_offset: load_library_export.rva,
             free_library_offset: free_library_export.rva,
             get_last_error_offset: get_last_error_export.rva,
-            #[cfg(feature = "rpc-core")]
-            get_proc_address_offset: get_proc_address_export.rva,
         })
     }
 
