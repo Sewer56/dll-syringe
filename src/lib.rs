@@ -45,3 +45,8 @@ pub mod function;
 /// C exports for the library.
 #[cfg(feature = "c-exports")]
 pub mod c_exports;
+
+pub(crate) mod stubs {
+    #[cfg(feature = "syringe")]
+    pub mod loadlibraryw;
+}

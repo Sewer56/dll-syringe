@@ -1,27 +1,17 @@
 use cstr::cstr;
-use iced_x86::{
-    code_asm::{
-        dword_ptr,
-        registers::{gpr32::*, gpr64::*},
-        CodeAssembler,
-    },
-    IcedError,
-};
 use num_enum::TryFromPrimitive;
 use path_absolutize::Absolutize;
 use std::{cell::OnceCell, io, mem, path::Path};
 use widestring::{u16cstr, U16CString};
-use winapi::shared::{
-    minwindef::{BOOL, DWORD, FALSE, HMODULE},
-    ntdef::LPCWSTR,
-};
+use winapi::shared::minwindef::{BOOL, DWORD, FALSE, HMODULE};
 
 use crate::{
     error::{EjectError, ExceptionCode, ExceptionOrIoError, InjectError, LoadInjectHelpDataError},
     process::{
-        memory::{RemoteAllocation, RemoteBox, RemoteBoxAllocator},
-        BorrowedProcess, BorrowedProcessModule, ModuleHandle, OwnedProcess, Process, ProcessModule,
+        memory::RemoteBoxAllocator, BorrowedProcess, BorrowedProcessModule, ModuleHandle,
+        OwnedProcess, Process, ProcessModule,
     },
+    stubs::loadlibraryw::{LoadLibraryWFn, LoadLibraryWStub},
 };
 
 #[cfg(all(target_arch = "x86_64", feature = "into-x86-from-x64"))]
@@ -32,9 +22,8 @@ use {
     winapi::{shared::minwindef::MAX_PATH, um::wow64apiset::GetSystemWow64DirectoryW},
 };
 
-type LoadLibraryWFn = unsafe extern "system" fn(LPCWSTR) -> HMODULE;
-type FreeLibraryFn = unsafe extern "system" fn(HMODULE) -> BOOL;
-type GetLastErrorFn = unsafe extern "system" fn() -> DWORD;
+pub(crate) type FreeLibraryFn = unsafe extern "system" fn(HMODULE) -> BOOL;
+pub(crate) type GetLastErrorFn = unsafe extern "system" fn() -> DWORD;
 
 #[derive(Debug, Clone)]
 pub(crate) struct InjectHelpData {
@@ -361,135 +350,5 @@ impl Syringe {
         let path_len = result as usize;
         let path = unsafe { MaybeUninit::slice_assume_init_ref(&path_buf[..path_len]) };
         Ok(PathBuf::from(U16Str::from_slice(path).to_os_string()))
-    }
-}
-
-#[derive(Debug)]
-struct LoadLibraryWStub {
-    code: RemoteAllocation,
-    result: RemoteBox<ModuleHandle>,
-}
-
-impl LoadLibraryWStub {
-    fn build(
-        inject_data: &InjectHelpData,
-        remote_allocator: &RemoteBoxAllocator,
-    ) -> Result<Self, InjectError> {
-        let result = remote_allocator.alloc_uninit::<ModuleHandle>()?;
-
-        let code = if remote_allocator.process().is_x86()? {
-            Self::build_code_x86(
-                inject_data.get_load_library_fn_ptr(),
-                result.as_raw_ptr().cast(),
-                inject_data.get_get_last_error(),
-            )
-            .unwrap()
-        } else {
-            Self::build_code_x64(
-                inject_data.get_load_library_fn_ptr(),
-                result.as_raw_ptr().cast(),
-                inject_data.get_get_last_error(),
-            )
-            .unwrap()
-        };
-        let code = remote_allocator.alloc_and_copy_buf(code.as_slice())?;
-
-        Ok(Self { code, result })
-    }
-
-    fn call(&self, remote_wide_module_path: *mut u16) -> Result<ModuleHandle, InjectError> {
-        // creating a thread that will call LoadLibraryW with a pointer to payload_path as argument
-        let exit_code = self.code.process().run_remote_thread(
-            unsafe { mem::transmute(self.code.as_raw_ptr()) },
-            remote_wide_module_path,
-        )?;
-
-        Syringe::remote_exit_code_to_error_or_exception(exit_code)?;
-
-        let injected_module_handle = self.result.read()?;
-        assert!(!injected_module_handle.is_null());
-
-        Ok(injected_module_handle)
-    }
-
-    #[allow(dead_code)]
-    fn process(&self) -> BorrowedProcess<'_> {
-        self.code.process()
-    }
-
-    #[allow(clippy::fn_to_numeric_cast, clippy::fn_to_numeric_cast_with_truncation)]
-    fn build_code_x86(
-        load_library_w: LoadLibraryWFn,
-        return_buffer: *mut HMODULE,
-        get_last_error: GetLastErrorFn,
-    ) -> Result<Vec<u8>, IcedError> {
-        assert!(!return_buffer.is_null());
-        assert_eq!(load_library_w as u32 as usize, load_library_w as usize);
-        assert_eq!(return_buffer as u32 as usize, return_buffer as usize);
-        assert_eq!(get_last_error as u32 as usize, get_last_error as usize);
-
-        let mut asm = CodeAssembler::new(32)?;
-
-        asm.mov(eax, esp + 4)?; // CreateRemoteThread lpParameter
-        asm.push(eax)?; // lpLibFileName
-        asm.mov(eax, load_library_w as u32)?;
-        asm.call(eax)?;
-        asm.mov(dword_ptr(return_buffer as u32), eax)?;
-        // asm.mov(eax, 0)?;
-        let mut label = asm.create_label();
-        asm.test(eax, eax)?;
-        asm.mov(eax, 0)?;
-        asm.jnz(label)?;
-        asm.mov(eax, get_last_error as u32)?;
-        asm.call(eax)?; // return 0
-        asm.set_label(&mut label)?;
-        asm.ret_1(4)?; // Restore stack ptr. (Callee cleanup)
-
-        let code = asm.assemble(0x1234_5678)?;
-        debug_assert_eq!(
-            code,
-            asm.assemble(0x1111_2222)?,
-            "LoadLibraryW x86 stub is not location independent"
-        );
-
-        Ok(code)
-    }
-
-    #[allow(clippy::fn_to_numeric_cast, clippy::fn_to_numeric_cast_with_truncation)]
-    fn build_code_x64(
-        load_library_w: LoadLibraryWFn,
-        return_buffer: *mut HMODULE,
-        get_last_error: GetLastErrorFn,
-    ) -> Result<Vec<u8>, IcedError> {
-        assert!(!return_buffer.is_null());
-
-        let mut asm = CodeAssembler::new(64)?;
-
-        asm.sub(rsp, 40)?; // Re-align stack to 16 byte boundary +32 shadow space
-
-        // arg already in rcx
-        asm.mov(rax, load_library_w as u64)?;
-        asm.call(rax)?;
-        asm.mov(dword_ptr(return_buffer as u64), rax)?; // move result to buffer
-
-        let mut label = asm.create_label();
-        asm.test(rax, rax)?;
-        asm.mov(rax, 0u64)?;
-        asm.jnz(label)?;
-        asm.mov(rax, get_last_error as u64)?;
-        asm.call(rax)?; // return 0
-        asm.set_label(&mut label)?;
-
-        asm.add(rsp, 40)?; // Re-align stack to 16 byte boundary + shadow space.
-        asm.ret()?; // Restore stack ptr. (Callee cleanup)
-
-        let code = asm.assemble(0x1234_5678)?;
-        debug_assert_eq!(
-            code,
-            asm.assemble(0x1111_2222)?,
-            "LoadLibraryW x64 stub is not location independent"
-        );
-
-        Ok(code)
     }
 }
