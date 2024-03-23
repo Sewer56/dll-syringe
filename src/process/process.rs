@@ -1,6 +1,6 @@
 use std::{
     ffi::OsString,
-    io,
+    io::{self},
     mem::{self, MaybeUninit},
     num::NonZeroU32,
     os::windows::prelude::{AsHandle, AsRawHandle, FromRawHandle, OwnedHandle},
@@ -31,6 +31,7 @@ use winapi::{
 };
 
 use crate::{
+    errors::structs::OsError,
     process::{BorrowedProcess, ProcessModule},
     utils::{win_fill_path_buf_helper, FillPathBufResult},
 };
@@ -118,9 +119,9 @@ pub trait Process: AsHandle + AsRawHandle {
     }
 
     /// Returns the id of this process.
-    fn pid(&self) -> Result<NonZeroU32, io::Error> {
+    fn pid(&self) -> Result<NonZeroU32, OsError> {
         let result = unsafe { GetProcessId(self.as_raw_handle()) };
-        NonZeroU32::new(result).ok_or_else(io::Error::last_os_error)
+        NonZeroU32::new(result).ok_or_else(OsError::new)
     }
 
     /// Returns whether this process is running under [WOW64](https://docs.microsoft.com/en-us/windows/win32/winprog64/running-32-bit-applications).
@@ -196,19 +197,19 @@ pub trait Process: AsHandle + AsRawHandle {
         &self,
         remote_fn: extern "system" fn(*mut T) -> u32,
         parameter: *mut T,
-    ) -> Result<u32, io::Error> {
+    ) -> Result<u32, OsError> {
         let thread_handle = self.start_remote_thread(remote_fn, parameter)?;
 
         let reason = unsafe { WaitForSingleObject(thread_handle.as_raw_handle(), INFINITE) };
         if reason == WAIT_FAILED {
-            return Err(io::Error::last_os_error());
+            return Err(OsError::new());
         }
 
         let mut exit_code = MaybeUninit::uninit();
         let result =
             unsafe { GetExitCodeThread(thread_handle.as_raw_handle(), exit_code.as_mut_ptr()) };
         if result == 0 {
-            return Err(io::Error::last_os_error());
+            return Err(OsError::new());
         }
         debug_assert_ne!(
             result as u32, STILL_ACTIVE,

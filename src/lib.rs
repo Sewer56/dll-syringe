@@ -39,8 +39,8 @@ pub(crate) mod utils;
 /// Module containing the error enums used in this crate.
 pub mod error;
 
-/// Module containing traits and types for working with function pointers.
-pub mod function;
+/// Module containing the structs used in this crate.
+pub mod errors;
 
 /// C exports for the library.
 #[cfg(feature = "c-exports")]

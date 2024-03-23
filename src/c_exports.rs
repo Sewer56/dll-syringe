@@ -9,7 +9,6 @@ use std::ptr::null_mut;
 // The C code only interacts with pointers to these structs.
 
 /// Represents an instance of a Syringe for a target process.
-#[derive(Debug)]
 pub struct CSyringe {
     syringe: Syringe,
 }

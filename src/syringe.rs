@@ -1,15 +1,17 @@
 use cstr::cstr;
 use num_enum::TryFromPrimitive;
 use path_absolutize::Absolutize;
+use reloaded_memory_buffers::{buffers::Buffers, structs::params::BufferAllocatorSettings};
 use std::{cell::OnceCell, io, mem, path::Path};
 use widestring::{u16cstr, U16CString};
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, HMODULE};
 
 use crate::{
     error::{EjectError, ExceptionCode, ExceptionOrIoError, InjectError, LoadInjectHelpDataError},
+    errors::enums::CreateSyringeError,
     process::{
-        memory::RemoteBoxAllocator, BorrowedProcess, BorrowedProcessModule, ModuleHandle,
-        OwnedProcess, Process, ProcessModule,
+        BorrowedProcess, BorrowedProcessModule, ModuleHandle, OwnedProcess, Process, ProcessModule,
+        RemoteAllocation,
     },
     stubs::loadlibraryw::{LoadLibraryWFn, LoadLibraryWStub},
 };
@@ -28,22 +30,24 @@ pub(crate) type GetLastErrorFn = unsafe extern "system" fn() -> DWORD;
 #[derive(Debug, Clone)]
 pub(crate) struct InjectHelpData {
     kernel32_module: ModuleHandle,
-    load_library_offset: usize,
-    free_library_offset: usize,
-    get_last_error_offset: usize,
+    load_library_offset: u32,
+    free_library_offset: u32,
+    get_last_error_offset: u32,
 }
 
 unsafe impl Send for InjectHelpData {}
 
 impl InjectHelpData {
     pub fn get_load_library_fn_ptr(&self) -> LoadLibraryWFn {
-        unsafe { mem::transmute(self.kernel32_module as usize + self.load_library_offset) }
+        unsafe { mem::transmute(self.kernel32_module as usize + self.load_library_offset as usize) }
     }
     pub fn get_free_library_fn_ptr(&self) -> FreeLibraryFn {
-        unsafe { mem::transmute(self.kernel32_module as usize + self.free_library_offset) }
+        unsafe { mem::transmute(self.kernel32_module as usize + self.free_library_offset as usize) }
     }
     pub fn get_get_last_error(&self) -> GetLastErrorFn {
-        unsafe { mem::transmute(self.kernel32_module as usize + self.get_last_error_offset) }
+        unsafe {
+            mem::transmute(self.kernel32_module as usize + self.get_last_error_offset as usize)
+        }
     }
 }
 
@@ -67,28 +71,35 @@ impl InjectHelpData {
 /// // eject the payload from the target (optional)
 /// syringe.eject(injected_payload).unwrap();
 /// ```
-#[derive(Debug)]
 #[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "syringe")))]
 pub struct Syringe {
-    pub(crate) inject_help_data: OnceCell<InjectHelpData>,
-    pub(crate) remote_allocator: RemoteBoxAllocator,
+    inject_help_data: OnceCell<InjectHelpData>,
+    remote_allocation: RemoteAllocation,
     load_library_w_stub: OnceCell<LoadLibraryWStub>,
 }
 
 impl Syringe {
     /// Creates a new syringe for the given target process.
     #[must_use]
-    pub fn for_process(process: OwnedProcess) -> Self {
-        Self {
-            remote_allocator: RemoteBoxAllocator::new(process),
+    pub fn for_process(process: OwnedProcess) -> Result<Self, CreateSyringeError> {
+        let mut settings = BufferAllocatorSettings::new();
+        settings.min_address = 0;
+        settings.max_address = i32::MAX as usize;
+        settings.size = 4096;
+        settings.target_process_id = process.pid()?.get();
+
+        let allocation = Buffers::allocate_private_memory(&mut settings)?;
+
+        Ok(Self {
+            remote_allocation: RemoteAllocation::new(allocation, process),
             inject_help_data: OnceCell::new(),
             load_library_w_stub: OnceCell::new(),
-        }
+        })
     }
 
     /// Creates a new syringe for the given suspended target process.
-    pub fn for_suspended_process(process: OwnedProcess) -> Result<Self, io::Error> {
-        let syringe = Self::for_process(process);
+    pub fn for_suspended_process(process: OwnedProcess) -> Result<Self, CreateSyringeError> {
+        let mut syringe = Self::for_process(process)?;
 
         // If we are injecting into a 'suspended' process, then said process is said to not be fully
         // initialized. This means:
@@ -99,9 +110,9 @@ impl Syringe {
         // Thankfully we can 'initialize' this suspended process without running any end user logic
         // (e.g. a game's entry point) by creating a dummy method and invoking it.
         let ret: u8 = 0xC3;
-        let bx = syringe.remote_allocator.alloc_and_copy(&ret)?;
+        let bx = syringe.remote_allocation.write_in_place(&[ret])?;
         syringe.process().run_remote_thread(
-            unsafe { mem::transmute(bx.as_raw_ptr()) },
+            unsafe { mem::transmute(bx) },
             std::ptr::null::<u8>() as *mut u8,
         )?;
 
@@ -110,14 +121,14 @@ impl Syringe {
 
     /// Returns the target process for this syringe.
     pub fn process(&self) -> BorrowedProcess<'_> {
-        self.remote_allocator.process()
+        self.remote_allocation.process()
     }
 
     /// Injects the module from the given path into the target process.
     ///
     /// # Limitations
     /// - The target process and the given module need to be of the same bitness.
-    /// - If the current process is `x64` the target process can be either `x64` (always available) or `x86` (with the `into_x86_from_x64` feature enabled).
+    /// - If the current process is `x64` the target process can be either `x64` (always available) or `x86`.
     /// - If the current process is `x86` the target process can only be `x86`.
     pub fn inject(
         &self,
@@ -127,14 +138,14 @@ impl Syringe {
             let inject_data = self
                 .inject_help_data
                 .get_or_try_init(|| Self::load_inject_help_data_for_process(self.process()))?;
-            LoadLibraryWStub::build(inject_data, &self.remote_allocator)
+            LoadLibraryWStub::build(inject_data, &self.remote_allocation)
         })?;
 
         let module_path = payload_path.as_ref().absolutize()?;
         let wide_module_path =
             U16CString::from_os_str(module_path.as_os_str())?.into_vec_with_nul();
         let remote_wide_module_path = self
-            .remote_allocator
+            .remote_allocation
             .alloc_and_copy_buf(wide_module_path.as_slice())?;
 
         let injected_module_handle = load_library_w
@@ -161,7 +172,7 @@ impl Syringe {
     ///
     /// # Limitations
     /// - The target process and the given module need to be of the same bitness.
-    /// - If the current process is `x64` the target process can be either `x64` (always available) or `x86` (with the `into_x86_from_x64` feature enabled).
+    /// - If the current process is `x64` the target process can be either `x64` (always available) or `x86`.
     /// - If the current process is `x86` the target process can only be `x86`.
     pub fn find_or_inject(
         &self,
@@ -216,7 +227,7 @@ impl Syringe {
 
         debug_assert!(
             !self
-                .remote_allocator
+                .remote_allocation
                 .process()
                 .module_handles()?
                 .any(|m| m == module.handle()),
@@ -289,8 +300,6 @@ impl Syringe {
         })
     }
 
-    #[cfg(target_arch = "x86_64")]
-    #[cfg(feature = "into-x86-from-x64")]
     fn _load_inject_help_data_for_process(
         process: BorrowedProcess<'_>,
     ) -> Result<InjectHelpData, LoadInjectHelpDataError> {

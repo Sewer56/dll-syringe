@@ -3,10 +3,7 @@ use core::{mem, ptr::write_unaligned};
 pub(crate) type LoadLibraryWFn = unsafe extern "system" fn(LPCWSTR) -> HMODULE;
 use crate::{
     error::InjectError,
-    process::{
-        memory::{RemoteAllocation, RemoteBox, RemoteBoxAllocator},
-        BorrowedProcess, ModuleHandle, Process,
-    },
+    process::{BorrowedProcess, ModuleHandle, Process},
     InjectHelpData,
 };
 use crate::{GetLastErrorFn, Syringe};

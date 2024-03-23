@@ -8,6 +8,7 @@
         "tests/helpers/test_payload/Cargo.toml",
         "tests/helpers/test_target/Cargo.toml",
     ],
+    "rust-analyzer.check.features": "all",
     "rust-analyzer.cargo.features": "all",
     "asm-code-lens.enableCodeLenses": false
 }

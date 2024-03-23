@@ -1,5 +1,5 @@
 use std::{
-    ffi::{CStr, CString, OsString},
+    ffi::OsString,
     io,
     mem::{self, MaybeUninit},
     path::{Path, PathBuf},
@@ -7,8 +7,7 @@ use std::{
 };
 
 use crate::{
-    error::{GetLocalProcedureAddressError, IoOrNulError},
-    function::{FunctionPtr, RawFunctionPtr},
+    error::IoOrNulError,
     process::{BorrowedProcess, OwnedProcess, Process},
     utils::{win_fill_path_buf_helper, FillPathBufResult},
 };
@@ -20,7 +19,7 @@ use winapi::{
         winerror::{ERROR_INSUFFICIENT_BUFFER, ERROR_MOD_NOT_FOUND},
     },
     um::{
-        libloaderapi::{GetModuleFileNameW, GetModuleHandleW, GetProcAddress},
+        libloaderapi::{GetModuleFileNameW, GetModuleHandleW},
         memoryapi::VirtualQueryEx,
         psapi::{GetModuleBaseNameW, GetModuleFileNameExW},
         winnt::{MEMORY_BASIC_INFORMATION, PAGE_NOACCESS},
@@ -292,52 +291,6 @@ impl<P: Process> ProcessModule<P> {
                 }
             })
             .map(|e| e.into())
-        }
-    }
-
-    /// Returns a pointer to the procedure with the given name from this module.
-    ///
-    /// # Note
-    /// This function is only supported for modules in the current process.
-    pub fn get_local_procedure_address(
-        &self,
-        proc_name: impl AsRef<str>,
-    ) -> Result<RawFunctionPtr, GetLocalProcedureAddressError> {
-        if self.is_remote() {
-            return Err(GetLocalProcedureAddressError::UnsupportedRemoteTarget);
-        }
-
-        let proc_name = CString::new(proc_name.as_ref())?;
-        self.get_local_procedure_address_cstr(&proc_name)
-            .map_err(|e| e.into())
-    }
-
-    /// Returns a pointer to the procedure with the given name from this module.
-    ///
-    /// # Note
-    /// This function is only supported for modules in the current process.
-    ///
-    /// # Safety
-    /// The target function must abide by the given function signature.
-    pub unsafe fn get_local_procedure<F: FunctionPtr>(
-        &self,
-        proc_name: impl AsRef<str>,
-    ) -> Result<F, GetLocalProcedureAddressError> {
-        self.get_local_procedure_address(proc_name)
-            .map(|addr| unsafe { F::from_ptr(addr) })
-    }
-
-    pub(crate) fn get_local_procedure_address_cstr(
-        &self,
-        proc_name: &CStr,
-    ) -> Result<RawFunctionPtr, io::Error> {
-        assert!(self.is_local());
-
-        let fn_ptr = unsafe { GetProcAddress(self.handle(), proc_name.as_ptr()) };
-        if let Some(fn_ptr) = NonNull::new(fn_ptr) {
-            Ok(fn_ptr.as_ptr())
-        } else {
-            Err(io::Error::last_os_error())
         }
     }
 
